@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Scanner de factures</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #ffffff; --bg2: #f5f5f4; --bg3: #efefed;
+      --text: #1a1a1a; --text2: #6b6b6b; --text3: #a3a3a3;
+      --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+      --success-bg: #eaf3de; --success-text: #3b6d11;
+      --warning-bg: #faeeda; --warning-text: #854f0b;
+      --danger-bg: #fcebeb; --danger-text: #a32d2d;
+      --radius: 10px; --radius-lg: 14px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1c; --bg2: #2a2a2a; --bg3: #222222;
+        --text: #f0f0f0; --text2: #a0a0a0; --text3: #666;
+        --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
+        --success-bg: #173404; --success-text: #c0dd97;
+        --warning-bg: #412402; --warning-text: #fac775;
+        --danger-bg: #501313; --danger-text: #f7c1c1;
+      }
+    }
+    body { font-family: var(--font); background: var(--bg3); color: var(--text); min-height: 100vh; }
+    .container { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+    .app-header { margin-bottom: 1.5rem; }
+    .app-header h1 { font-size: 22px; font-weight: 600; }
+    .app-header p { font-size: 13px; color: var(--text2); margin-top: 4px; }
+    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+    .mode-toggle { display: flex; gap: 6px; margin-bottom: 1rem; }
+    .mode-btn { padding: 7px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 0.5px solid var(--border2); background: var(--bg); color: var(--text2); font-family: var(--font); transition: all 0.15s; }
+    .mode-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .cam-wrapper { position: relative; width: 100%; border-radius: var(--radius); overflow: hidden; background: #000; aspect-ratio: 3/4; display: flex; align-items: center; justify-content: center; }
+    #video { width: 100%; height: 100%; object-fit: cover; display: none; }
+    #overlay { position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; display:none; }
+    .cam-placeholder { color: var(--text3); font-size: 13px; text-align: center; padding: 2rem; }
+    .cam-placeholder svg { display: block; margin: 0 auto 12px; }
+    .cam-hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; padding: 6px 16px; border-radius: 20px; white-space: nowrap; display: none; backdrop-filter: blur(4px); }
+    #snap-flash { position: absolute; top:0;left:0;width:100%;height:100%; background:#fff; opacity:0; pointer-events:none; transition: opacity 0.05s; }
+    .controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .auto-status { font-size: 12px; color: var(--text2); margin-top: 6px; min-height: 18px; }
+    .upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 2rem; text-align: center; cursor: pointer; transition: background 0.15s; }
+    .upload-zone:hover { background: var(--bg2); }
+    .upload-zone svg { display: block; margin: 0 auto 10px; }
+    .upload-zone p { font-size: 14px; color: var(--text2); }
+    .upload-zone span { font-size: 12px; color: var(--text3); }
+    .status-bar { background: var(--bg2); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: var(--text2); margin-bottom: 1rem; display: none; align-items: center; gap: 8px; }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .invoice-card { display: none; }
+    .invoice-card .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); }
+    .supplier-name { font-weight: 600; font-size: 16px; }
+    .invoice-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+    .badge { font-size: 11px; padding: 3px 10px; border-radius: var(--radius); background: var(--warning-bg); color: var(--warning-text); white-space: nowrap; }
+    .fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 1rem; }
+    .field { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; }
+    .field label { font-size: 10px; color: var(--text3); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .field input { font-size: 14px; color: var(--text); background: none; border: none; outline: none; width: 100%; font-family: var(--font); }
+    .full { grid-column: 1 / -1; }
+    .total-field { background: var(--bg); border: 0.5px solid var(--border2); }
+    .total-field input { font-size: 20px; font-weight: 600; }
+    .act { display: flex; gap: 8px; }
+    .btn { padding: 9px 18px; border-radius: var(--radius); font-size: 13px; cursor: pointer; border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); font-family: var(--font); transition: all 0.15s; }
+    .btn:hover { background: var(--bg2); }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .stats-row { display: none; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 1rem; }
+    .stat { background: var(--bg2); border-radius: var(--radius); padding: 12px; }
+    .stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+    .stat-value { font-size: 20px; font-weight: 600; }
+    .stat-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .table-section { display: none; }
+    .table-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+    th { text-align: left; font-weight: 500; color: var(--text2); padding: 7px 10px; border-bottom: 0.5px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td { padding: 9px 10px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .empty-table { text-align: center; padding: 2.5rem; color: var(--text3); font-size: 13px; }
+    select.status-sel { font-size: 12px; border: none; background: none; cursor: pointer; font-family: var(--font); color: var(--text); padding: 0; }
+    .export-row { display: flex; gap: 8px; margin-top: 12px; }
+    #snap-canvas { display: none; }
+    .api-section { margin-bottom: 1rem; }
+    .api-section label { font-size: 12px; color: var(--text2); display: block; margin-bottom: 6px; }
+    .api-input-wrap { display: flex; gap: 8px; }
+    .api-input-wrap input { flex: 1; padding: 8px 12px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--font); outline: none; }
+    .api-input-wrap input:focus { border-color: var(--text); }
+    .api-note { font-size: 11px; color: var(--text3); margin-top: 5px; }
+    .api-note a { color: var(--text2); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="app-header">
+    <h1>Scanner de factures</h1>
+    <p>Scan ou upload — extraction automatique par IA</p>
+  </div>
+
+  <!-- Clé API -->
+  <div class="card api-section" id="api-card">
+    <label>Clé API Anthropic</label>
+    <div class="api-input-wrap">
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
+      <button class="btn btn-primary" onclick="saveApiKey()">Enregistrer</button>
+    </div>
+    <p class="api-note">La clé est stockée localement dans ton navigateur. Obtiens-en une sur <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="spinner"></div>
+    <span id="status-text">Extraction en cours...</span>
+  </div>
+
+  <!-- Mode toggle -->
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="mode-cam" onclick="setMode('cam')">📷 Caméra</button>
+    <button class="mode-btn" id="mode-upload" onclick="setMode('upload')">📁 Upload fichier</button>
+  </div>
+
+  <!-- Caméra -->
+  <div id="section-cam">
+    <div class="cam-wrapper" id="cam-wrapper">
+      <div class="cam-placeholder" id="cam-placeholder">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" color="#999"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Démarre la caméra pour scanner
+      </div>
+      <video id="video" autoplay playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="snap-flash"></div>
+      <div class="cam-hint" id="cam-hint">Place la facture dans la zone</div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-primary" id="btn-start" onclick="startCamera()">Démarrer la caméra</button>
+      <button class="btn" id="btn-snap" onclick="snapManual()" style="display:none">Capturer manuellement</button>
+      <button class="btn" id="btn-stop" onclick="stopCamera()" style="display:none">Arrêter</button>
+    </div>
+    <div class="auto-status" id="auto-status"></div>
+  </div>
+
+  <!-- Upload -->
+  <div id="section-upload" style="display:none">
+    <div class="upload-zone" onclick="document.getElementById('file-input').click()">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" color="#999"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <p>Clique ou glisse une facture ici</p>
+      <span>PDF, JPG, PNG — max 20 MB</span>
+    </div>
+    <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none">
+  </div>
+
+  <!-- Résultat extraction -->
+  <div class="card invoice-card" id="invoice-card" style="margin-top:1rem">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name" id="card-supplier">—</div>
+        <div class="invoice-sub" id="card-invno">—</div>
+      </div>
+      <div class="badge">À payer</div>
+    </div>
+    <div class="fields-grid">
+      <div class="field"><label>Fournisseur</label><input id="f-supplier"></div>
+      <div class="field"><label>N° facture</label><input id="f-invoice-no"></div>
+      <div class="field"><label>Date</label><input id="f-date"></div>
+      <div class="field"><label>Échéance</label><input id="f-due"></div>
+      <div class="field"><label>Montant HT (CHF)</label><input id="f-ht"></div>
+      <div class="field"><label>TVA</label><input id="f-tva"></div>
+      <div class="field full total-field"><label>Total TTC (CHF)</label><input id="f-ttc"></div>
+      <div class="field full"><label>IBAN</label><input id="f-iban"></div>
+    </div>
+    <div class="act">
+      <button class="btn btn-primary" onclick="addToTable()">Ajouter au registre</button>
+      <button class="btn" onclick="resetCard()">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat"><div class="stat-label">Factures</div><div class="stat-value" id="stat-count">0</div></div>
+    <div class="stat"><div class="stat-label">Total TTC</div><div class="stat-value" id="stat-total" style="font-size:15px">CHF 0.00</div></div>
+    <div class="stat"><div class="stat-label">En attente</div><div class="stat-value" id="stat-pending">0</div><div class="stat-sub">à payer</div></div>
+  </div>
+
+  <!-- Registre -->
+  <div class="table-section" id="table-section">
+    <h3>Registre des factures</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fournisseur</th><th>N°</th><th>Date</th><th>Échéance</th><th>TTC</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="invoice-tbody"><tr><td colspan="7" class="empty-table">Aucune facture enregistrée</td></tr></tbody>
+      </table>
+    </div>
+    <div class="export-row">
+      <button class="btn" onclick="exportCSV()">Exporter CSV</button>
+      <button class="btn" onclick="exportJSON()">Exporter JSON</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="snap-canvas" style="display:none"></canvas>
+
+<script>
+const DB_KEY = 'invoices-v1';
+const API_KEY_STORAGE = 'anthropic-api-key';
+let invoices = [];
+let stream = null;
+let autoTimer = null;
+let stableFrames = 0;
+let scanning = false;
+
+// --- API Key ---
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-')) { alert('Clé invalide — elle doit commencer par sk-ant-'); return; }
+  localStorage.setItem(API_KEY_STORAGE, key);
+  document.getElementById('api-card').style.background = 'var(--success-bg)';
+  setTimeout(() => document.getElementById('api-card').style.background = '', 1500);
+}
+function getApiKey() { return localStorage.getItem(API_KEY_STORAGE) || ''; }
+
+// --- Storage ---
+function loadStorage() {
+  try { const r = localStorage.getItem(DB_KEY); if(r) invoices = JSON.parse(r); } catch(e) { invoices = []; }
+  const key = getApiKey();
+  if(key) { document.getElementById('api-key-input').value = key; }
+  renderTable();
+}
+function saveStorage() { localStorage.setItem(DB_KEY, JSON.stringify(invoices)); }
+
+// --- Mode ---
+function setMode(m) {
+  document.getElementById('section-cam').style.display = m==='cam' ? 'block' : 'none';
+  document.getElementById('section-upload').style.display = m==='upload' ? 'block' : 'none';
+  document.getElementById('mode-cam').className = 'mode-btn' + (m==='cam'?' active':'');
+  document.getElementById('mode-upload').className = 'mode-btn' + (m==='upload'?' active':'');
+  if(m==='upload') stopCamera();
+}
+
+// --- Camera ---
+async function startCamera() {
+  if (!getApiKey()) { alert('Entre ta clé API Anthropic en haut de la page d\'abord.'); return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width:{ideal:1920}, height:{ideal:1080} }, audio: false });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('cam-hint').style.display = 'block';
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-snap').style.display = 'inline-block';
+    document.getElementById('btn-stop').style.display = 'inline-block';
+    video.addEventListener('loadedmetadata', () => {
+      const ov = document.getElementById('overlay');
+      ov.width = video.videoWidth || 640;
+      ov.height = video.videoHeight || 480;
+      startAutoDetect();
+    });
+  } catch(e) {
+    showStatus('Impossible d\'accéder à la caméra. Vérifie les permissions.', false);
+    setTimeout(hideStatus, 4000);
+  }
+}
+
+function stopCamera() {
+  if(stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  if(autoTimer) { cancelAnimationFrame(autoTimer); autoTimer=null; }
+  const video = document.getElementById('video');
+  video.style.display = 'none'; video.srcObject = null;
+  document.getElementById('cam-placeholder').style.display = 'block';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('cam-hint').style.display = 'none';
+  document.getElementById('btn-start').style.display = 'inline-block';
+  document.getElementById('btn-snap').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('auto-status').textContent = '';
+  stableFrames = 0; scanning = false;
+}
+
+function startAutoDetect() {
+  const video = document.getElementById('video');
+  const ov = document.getElementById('overlay');
+  const ctx = ov.getContext('2d');
+  const sc = document.getElementById('snap-canvas');
+  let frameCount = 0;
+  function loop() {
+    if(!stream) return;
+    autoTimer = requestAnimationFrame(loop);
+    frameCount++;
+    if(frameCount % 8 !== 0) return;
+    if(scanning) return;
+    const w = ov.width, h = ov.height;
+    sc.width = w; sc.height = h;
+    const sctx = sc.getContext('2d');
+    sctx.drawImage(video, 0, 0, w, h);
+    const edgeScore = detectDocument(sctx, w, h);
+    const detected = edgeScore > 0.18;
+    ctx.clearRect(0,0,w,h);
+    drawGuide(ctx, w, h, detected);
+    if(detected) {
+      stableFrames++;
+      const sec = Math.max(0, Math.ceil((20-stableFrames)/10));
+      document.getElementById('auto-status').textContent = sec > 0 ? `Document détecté — capture dans ${sec}s...` : 'Capture en cours...';
+    } else {
+      stableFrames = Math.max(0, stableFrames-2);
+      document.getElementById('auto-status').textContent = stableFrames > 5 ? 'Stabilise le document...' : 'Place la facture dans la zone';
+    }
+    if(stableFrames >= 20) { stableFrames = 0; triggerCapture(); }
+  }
+  loop();
+}
+
+function detectDocument(ctx, w, h) {
+  const margin = 0.15;
+  const rx=Math.floor(w*margin), ry=Math.floor(h*margin), rw=Math.floor(w*(1-2*margin)), rh=Math.floor(h*(1-2*margin));
+  const imgData = ctx.getImageData(rx, ry, rw, rh);
+  const data = imgData.data;
+  let edges = 0;
+  const step = 4;
+  for(let y=step; y<rh-step; y+=step) {
+    for(let x=step; x<rw-step; x+=step) {
+      const i=(y*rw+x)*4;
+      const gray=(data[i]+data[i+1]+data[i+2])/3;
+      const ri=((y*rw+(x+step)))*4, di=(((y+step)*rw+x))*4;
+      const grayR=(data[ri]+data[ri+1]+data[ri+2])/3;
+      const grayD=(data[di]+data[di+1]+data[di+2])/3;
+      if(Math.abs(gray-grayR)>25||Math.abs(gray-grayD)>25) edges++;
+    }
+  }
+  return edges/((rw/step)*(rh/step));
+}
+
+function drawGuide(ctx, w, h, detected) {
+  const m=0.08, x=w*m, y=h*m, rw=w*(1-2*m), rh=h*(1-2*m), cl=32;
+  ctx.strokeStyle = detected ? '#4ade80' : 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = detected ? 3.5 : 2;
+  ctx.lineCap = 'round';
+  const corners = [[x,y,1,1],[x+rw,y,-1,1],[x+rw,y+rh,-1,-1],[x,y+rh,1,-1]];
+  corners.forEach(([cx,cy,dx,dy]) => {
+    ctx.beginPath(); ctx.moveTo(cx+dx*cl,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy*cl); ctx.stroke();
+  });
+}
+
+async function triggerCapture() {
+  if(scanning) return;
+  scanning = true;
+  const flash = document.getElementById('snap-flash');
+  flash.style.opacity = '1';
+  setTimeout(()=>flash.style.opacity='0', 120);
+  const video = document.getElementById('video');
+  const sc = document.getElementById('snap-canvas');
+  sc.width = video.videoWidth; sc.height = video.videoHeight;
+  sc.getContext('2d').drawImage(video, 0, 0);
+  const base64 = sc.toDataURL('image/jpeg', 0.92).split(',')[1];
+  await extractFromBase64(base64, 'image/jpeg');
+  scanning = false;
+}
+
+async function snapManual() {
+  if(scanning || !stream) return;
+  scanning = true;
+  const video = document.getElementById('video');
+  const sc = document.getElementById('snap-canvas');
+  sc.width = video.videoWidth; sc.height = video.videoHeight;
+  sc.getContext('2d').drawImage(video, 0, 0);
+  const base64 = sc.toDataURL('image/jpeg', 0.92).split(',')[1];
+  await extractFromBase64(base64, 'image/jpeg');
+  scanning = false;
+}
+
+// --- Upload ---
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('file-input').addEventListener('change', async e => {
+    const file = e.target.files[0]; if(!file) return;
+    if (!getApiKey()) { alert('Entre ta clé API Anthropic en haut de la page d\'abord.'); return; }
+    showStatus('Lecture du fichier...');
+    const b64 = await toBase64(file);
+    await extractFromBase64(b64, file.type);
+    e.target.value='';
+  });
+  const zone = document.querySelector('.upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.background='var(--bg2)'; });
+  zone.addEventListener('dragleave', () => zone.style.background='');
+  zone.addEventListener('drop', async e => {
+    e.preventDefault(); zone.style.background='';
+    const file = e.dataTransfer.files[0];
+    if(file) {
+      if (!getApiKey()) { alert('Entre ta clé API Anthropic en haut de la page d\'abord.'); return; }
+      showStatus('Lecture...'); const b64=await toBase64(file); await extractFromBase64(b64,file.type);
+    }
+  });
+  loadStorage();
+});
+
+// --- Extraction IA ---
+async function extractFromBase64(base64, mediaType) {
+  showStatus('Extraction des données par IA...');
+  const apiKey = getApiKey();
+  if(!apiKey) { showStatus('Clé API manquante.', false); setTimeout(hideStatus,3000); return; }
+  try {
+    const isPdf = mediaType === 'application/pdf';
+    const contentBlock = isPdf
+      ? { type:"document", source:{ type:"base64", media_type:mediaType, data:base64 } }
+      : { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } };
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({
+        model:"claude-sonnet-4-20250514", max_tokens:1000,
+        messages:[{ role:"user", content:[contentBlock,{type:"text",text:`Extrais les données de cette facture. Réponds UNIQUEMENT en JSON valide, sans markdown, sans backticks, sans texte avant ou après. Format exact: {"supplier":"","invoice_no":"","date":"","due_date":"","amount_ht":"","tva":"","amount_ttc":"","iban":""}. Dates: DD.MM.YYYY. Montants: nombres avec 2 décimales. due_date: calcule depuis date+délai si nécessaire. Champs absents: "".`}] }]
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(text);
+    fillCard(parsed);
+    hideStatus();
+  } catch(e) {
+    showStatus('Erreur: ' + e.message, false);
+    setTimeout(hideStatus, 5000);
+  }
+}
+
+// --- Card ---
+function fillCard(d) {
+  document.getElementById('card-supplier').textContent = d.supplier||'—';
+  document.getElementById('card-invno').textContent = d.invoice_no ? 'Facture N° '+d.invoice_no : '—';
+  const map = {supplier:'supplier',['invoice-no']:'invoice_no',date:'date',due:'due_date',ht:'amount_ht',tva:'tva',ttc:'amount_ttc',iban:'iban'};
+  Object.entries(map).forEach(([id,key]) => { document.getElementById('f-'+id).value = d[key]||''; });
+  document.getElementById('invoice-card').style.display='block';
+  document.getElementById('invoice-card').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function addToTable() {
+  invoices.unshift({
+    supplier: document.getElementById('f-supplier').value,
+    invoice_no: document.getElementById('f-invoice-no').value,
+    date: document.getElementById('f-date').value,
+    due_date: document.getElementById('f-due').value,
+    amount_ht: document.getElementById('f-ht').value,
+    amount_ttc: document.getElementById('f-ttc').value,
+    status: 'pending',
+    added: new Date().toLocaleDateString('fr-CH')
+  });
+  saveStorage(); renderTable();
+  document.getElementById('invoice-card').style.display='none';
+}
+
+function resetCard() { document.getElementById('invoice-card').style.display='none'; }
+
+// --- Table ---
+function renderTable() {
+  const tbody = document.getElementById('invoice-tbody');
+  if(!invoices.length) {
+    tbody.innerHTML='<tr><td colspan="7" class="empty-table">Aucune facture enregistrée</td></tr>';
+    document.getElementById('stats-row').style.display='none';
+    document.getElementById('table-section').style.display='none';
+    return;
+  }
+  document.getElementById('stats-row').style.display='grid';
+  document.getElementById('table-section').style.display='block';
+  const total = invoices.reduce((s,i)=>s+(parseFloat(i.amount_ttc)||0),0);
+  document.getElementById('stat-count').textContent = invoices.length;
+  document.getElementById('stat-total').textContent = 'CHF '+total.toFixed(2);
+  document.getElementById('stat-pending').textContent = invoices.filter(i=>i.status==='pending').length;
+  const statusLabel = {pending:'⏳ À payer', paid:'✓ Payée', late:'⚠ En retard'};
+  tbody.innerHTML = invoices.map((inv,idx) => `
+    <tr>
+      <td style="font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inv.supplier||'—'}</td>
+      <td style="color:var(--text2)">${inv.invoice_no||'—'}</td>
+      <td style="color:var(--text2)">${inv.date||'—'}</td>
+      <td style="color:var(--text2)">${inv.due_date||'—'}</td>
+      <td style="font-weight:500">${inv.amount_ttc?'CHF '+parseFloat(inv.amount_ttc).toFixed(2):'—'}</td>
+      <td><select class="status-sel" onchange="changeStatus(${idx},this.value)">
+        <option value="pending" ${inv.status==='pending'?'selected':''}>⏳ À payer</option>
+        <option value="paid" ${inv.status==='paid'?'selected':''}>✓ Payée</option>
+        <option value="late" ${inv.status==='late'?'selected':''}>⚠ En retard</option>
+      </select></td>
+      <td><button onclick="deleteInvoice(${idx})" style="border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px" title="Supprimer">×</button></td>
+    </tr>`).join('');
+}
+
+function changeStatus(idx,val) { invoices[idx].status=val; saveStorage(); renderTable(); }
+function deleteInvoice(idx) { if(confirm('Supprimer cette facture ?')) { invoices.splice(idx,1); saveStorage(); renderTable(); } }
+
+// --- Export ---
+function toBase64(file) {
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
+}
+
+function exportCSV() {
+  const h=['Fournisseur','N° facture','Date','Échéance','HT CHF','TTC CHF','Statut','Ajouté le'];
+  const rows=invoices.map(i=>[i.supplier,i.invoice_no,i.date,i.due_date,i.amount_ht,i.amount_ttc,i.status,i.added]);
+  const csv=[h,...rows].map(r=>r.map(c=>`"${(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  download('\uFEFF'+csv,'factures.csv','text/csv;charset=utf-8');
+}
+
+function exportJSON() {
+  download(JSON.stringify(invoices,null,2),'factures.json','application/json');
+}
+
+function download(content, filename, type) {
+  const blob=new Blob([content],{type});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+}
+
+function showStatus(msg, loading=true) {
+  const bar=document.getElementById('status-bar'); bar.style.display='flex';
+  document.getElementById('status-text').textContent=msg;
+  bar.querySelector('.spinner').style.display=loading?'block':'none';
+}
+function hideStatus() { document.getElementById('status-bar').style.display='none'; }
+</script>
+</body>
+</html>
