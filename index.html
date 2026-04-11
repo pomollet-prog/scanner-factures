@@ -437,8 +437,21 @@ function fillCard(d) {
   document.getElementById('invoice-card').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-function addToTable() {
-  invoices.unshift({
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwD5hF7ZO9KnrUNB5SWaK10oLLA_XYKaRsfoC6BhJZDZbs9KushiHDFG3zzU5MNG0nmOQ/exec';
+
+async function sendToSheets(row) {
+  try {
+    await fetch(SHEETS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(row)
+    });
+  } catch(e) { console.warn('Google Sheets sync failed:', e); }
+}
+
+async function addToTable() {
+  const row = {
     supplier: document.getElementById('f-supplier').value,
     invoice_no: document.getElementById('f-invoice-no').value,
     date: document.getElementById('f-date').value,
@@ -447,9 +460,14 @@ function addToTable() {
     amount_ttc: document.getElementById('f-ttc').value,
     status: 'pending',
     added: new Date().toLocaleDateString('fr-CH')
-  });
+  };
+  invoices.unshift(row);
   saveStorage(); renderTable();
   document.getElementById('invoice-card').style.display='none';
+  showStatus('Envoi vers Google Sheets...');
+  await sendToSheets(row);
+  showStatus('✓ Ajouté dans Google Sheets !', false);
+  setTimeout(hideStatus, 2500);
 }
 
 function resetCard() { document.getElementById('invoice-card').style.display='none'; }
