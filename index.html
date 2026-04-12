@@ -437,15 +437,16 @@ function fillCard(d) {
   document.getElementById('invoice-card').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyTeriBXMZZ0JALbzzeR5-FexHCIL8Tu9nhIpk8VmnS-FZEpy1YQeHFqQD0VeropbU8Zw/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyjGHgwkSLyJCcbc2ZAKcxd7PxH6cc6277S2iPl3C4uMIVIt7qSBC0KV_nCd72pvHXKpQ/exec';
 
 async function sendToSheets(row) {
   try {
+    const form = new FormData();
+    form.append('data', JSON.stringify(row));
     await fetch(SHEETS_URL, {
       method: 'POST',
       mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(row)
+      body: form
     });
   } catch(e) { console.warn('Google Sheets sync failed:', e); }
 }
