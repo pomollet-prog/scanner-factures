@@ -173,6 +173,13 @@
       <div class="field full total-field"><label>Total TTC (CHF)</label><input id="f-ttc"></div>
       <div class="field full"><label>IBAN</label><input id="f-iban"></div>
     </div>
+    <div class="field full" style="margin-top:0">
+      <label>Envoyer vers</label>
+      <select id="f-destination" style="font-size:15px;color:var(--text);background:none;border:none;outline:none;width:100%;font-family:var(--font);cursor:pointer;padding:2px 0;">
+        <option value="valentin">👤 Mes factures (Valentin)</option>
+        <option value="maman">👵 Factures Maman</option>
+      </select>
+    </div>
     <div class="act">
       <button class="btn btn-primary" onclick="addToTable()">Ajouter au registre</button>
       <button class="btn" onclick="resetCard()">Annuler</button>
@@ -437,13 +444,17 @@ function fillCard(d) {
   document.getElementById('invoice-card').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyjGHgwkSLyJCcbc2ZAKcxd7PxH6cc6277S2iPl3C4uMIVIt7qSBC0KV_nCd72pvHXKpQ/exec';
+const SHEETS_URLS = {
+  valentin: 'https://script.google.com/macros/s/AKfycbyjGHgwkSLyJCcbc2ZAKcxd7PxH6cc6277S2iPl3C4uMIVIt7qSBC0KV_nCd72pvHXKpQ/exec',
+  maman: 'https://script.google.com/macros/s/AKfycbxVB29qBEMx4DDZIYFJQ1Gg7ur7TR2o94wrQijb97qzVWM27ChsvN9VCrdzmPJaYv36yQ/exec'
+};
 
-async function sendToSheets(row) {
+async function sendToSheets(row, destination) {
   try {
+    const url = SHEETS_URLS[destination] || SHEETS_URLS.valentin;
     const form = new FormData();
     form.append('data', JSON.stringify(row));
-    await fetch(SHEETS_URL, {
+    await fetch(url, {
       method: 'POST',
       mode: 'no-cors',
       body: form
@@ -452,6 +463,8 @@ async function sendToSheets(row) {
 }
 
 async function addToTable() {
+  const destination = document.getElementById('f-destination').value;
+  const destLabel = destination === 'maman' ? 'Maman' : 'Valentin';
   const row = {
     supplier: document.getElementById('f-supplier').value,
     invoice_no: document.getElementById('f-invoice-no').value,
@@ -460,14 +473,15 @@ async function addToTable() {
     amount_ht: document.getElementById('f-ht').value,
     amount_ttc: document.getElementById('f-ttc').value,
     status: 'pending',
-    added: new Date().toLocaleDateString('fr-CH')
+    added: new Date().toLocaleDateString('fr-CH'),
+    destination: destLabel
   };
   invoices.unshift(row);
   saveStorage(); renderTable();
   document.getElementById('invoice-card').style.display='none';
-  showStatus('Envoi vers Google Sheets...');
-  await sendToSheets(row);
-  showStatus('✓ Ajouté dans Google Sheets !', false);
+  showStatus('Envoi vers Google Sheets (' + destLabel + ')...');
+  await sendToSheets(row, destination);
+  showStatus('✓ Ajouté dans le Sheet de ' + destLabel + ' !', false);
   setTimeout(hideStatus, 2500);
 }
 
